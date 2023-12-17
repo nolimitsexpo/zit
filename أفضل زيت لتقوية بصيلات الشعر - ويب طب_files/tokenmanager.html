@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<!-- saved from url=(0053)https://www.webteb.com/pushnotifications/tokenmanager -->
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Webteb Push Notifications</title>
+    <meta name="robots" content="noindex">
+    <link rel="manifest" href="https://www.webteb.com/manifest.json">
+</head>
+
+<body>
+    <div class="demo-layout mdl-layout mdl-js-layout mdl-layout--fixed-header">
+
+        <!-- Header section containing title -->
+        <header class="mdl-layout__header mdl-color-text--white mdl-color--light-blue-700">
+            <div class="mdl-cell mdl-cell--12-col mdl-cell--12-col-tablet mdl-grid">
+                <div class="mdl-layout__header-row mdl-cell mdl-cell--12-col mdl-cell--12-col-tablet mdl-cell--8-col-desktop">
+                    <h3>Firebase Cloud Messaging</h3>
+                </div>
+            </div>
+        </header>
+
+        <main class="mdl-layout__content mdl-color--grey-100">
+            <div class="mdl-cell mdl-cell--12-col mdl-cell--12-col-tablet mdl-grid">
+                <!-- Container for the Table of content -->
+                <div class="mdl-card mdl-shadow--2dp mdl-cell mdl-cell--12-col mdl-cell--12-col-tablet mdl-cell--12-col-desktop">
+                    <div class="mdl-card__supporting-text mdl-color-text--grey-600">
+                        <!-- div to display the generated Instance ID token -->
+                        <div id="token_div" style="display: none;">
+                            <h4>Instance ID Token</h4>
+                            <p id="token" style="word-break: break-all;"></p>
+                            <button class="mdl-button mdl-js-button mdl-button--raised mdl-button--colored" onclick="deleteToken()">
+                                Delete Token
+                            </button>
+                        </div>
+                        <!-- div to display the UI to allow the request for permission to
+                           notify the user. This is shown if the app has not yet been
+                           granted permission to notify. -->
+                        <div id="permission_div" style="display: none;">
+                            <h4>Needs Permission</h4>
+                            <p id="token"></p>
+                            <button class="mdl-button mdl-js-button mdl-button--raised mdl-button--colored" onclick="requestPermission()">
+                                Request Permission
+                            </button>
+                        </div>
+                        <!-- div to display messages received by this app. -->
+                        <div id="messages"></div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- Firebase App is always required and must be first -->
+    <script src="./firebase-app.js.download"></script>
+    <script src="./firebase-messaging.js.download"></script>
+
+    <script type="text/javascript" src="./jquery-1.7.1.min.js.download"></script>
+
+    <script type="text/javascript">
+        var config;
+        var publicKey;
+
+
+                config = {
+                apiKey: "AIzaSyBY-Vpmqh4GsWm_xAN3taliEw2fq2o270o",
+                    authDomain: "webteb-web-notifications.firebaseapp.com",
+                        databaseURL: "https://webteb-web-notifications.firebaseio.com",
+                            projectId: "webteb-web-notifications",
+                                storageBucket: "webteb-web-notifications.appspot.com",
+                                    messagingSenderId: "575320626501"
+            };
+            publicKey = "BBCSsyF6EOgII5e1f6bGTg25qmkXvC_NwdfcVUl0Bhrv1GIFZRHmgi9d3wwmONSsjx-sr6C93_Xu3AP_awfLG74",
+            
+            firebase.initializeApp(config);
+        const messaging = firebase.messaging();
+        messaging.usePublicVapidKey(publicKey);
+
+        var info = {};
+
+        function addJEvent(action, label, value) {
+            console.log('push_event:' + action + "   " + label + "   " + value);
+            var data = {
+                type: "addJEvent",
+                data: {
+                    category: 'push_notifications',
+                    action: action, label: label, value: value, custom1: getBrowserId()
+                }
+            };
+            console.log('posting:' + data);
+            window.parent.postMessage(data, "*");
+        }
+
+        window.addEventListener("message", receiveMessage, false);
+        function receiveMessage(event) {
+            console.log("receiving message tokenManager");
+            console.log(event);
+
+            var eventData = event.data;
+
+            if (eventData.type == "pushNotificationInfo-result") {
+                info = eventData.data;
+                resetUI();
+            }
+
+        }
+
+        function UpdateNotificationsAnalytics(increaseAccepted, increaseDeclined) {
+
+        }
+
+        window.parent.postMessage({ type: "pushNotificationInfo" }, "*");
+        function requestPermission() {
+            var lastRequestTime = getLastNotificationRequestTime();
+            var minInterval = 10;
+            var now = (new Date()).getTime();
+            if (((now - lastRequestTime) / 1000) > minInterval) {
+                var permission_requested_app = getCounter("permission_requested_app");
+                if (permission_requested_app < 10) {
+                    setLastNotificationRequestTime();
+                    requestPermissionApp();
+                }
+                else {
+                    addJEvent('permission_maxrequests', null, incCounter('permission_maxrequests'));
+                }
+            }
+            else {
+                addJEvent('permission_interval', null, incCounter('permission_interval'));
+            }
+        }
+
+        function requestPermissionApp() {
+            console.log('Requesting permission app...');
+            addJEvent('permission_requested_app', null, incCounter('permission_requested_app'));
+            window.parent.postMessage({ type: "pushNotificationPermission" }, "*");
+        }
+
+        function requestPermissionNative() {
+            console.log('Requesting permission...');
+            addJEvent('permission_requested', null, incCounter('permission_requested'));
+            // [START request_permission]
+            messaging.requestPermission().then(function () {
+                addJEvent('permission_granted', null, incCounter('permission_granted'))
+                console.log('Notification permission granted.');
+                // TODO(developer): Retrieve an Instance ID token for use with FCM.
+                // [START_EXCLUDE]
+                // In many cases once an app has been granted notification permission, it
+                // should update its UI reflecting this.
+                resetUI();
+                UpdateNotificationsAnalytics(true, false);
+                // [END_EXCLUDE]
+            }).catch(function (err) {
+                if (err.code == "messaging/permission-blocked") {
+                    UpdateNotificationsAnalytics(false, true);
+                }
+                addJEvent('permission_blocked', err.code, incCounter('permission_blocked'));
+                console.log('Unable to get permission to notify.', err);
+            });
+            // [END request_permission]
+        }
+
+        messaging.onTokenRefresh(function () {
+            addJEvent('token_refreshed', null, incCounter('token_refreshed'));
+            messaging.getToken().then(function (refreshedToken) {
+                console.log('Token refreshed.');
+                setTokenSentToServer(false);
+                sendTokenToServer(refreshedToken);
+                resetUI();
+            }).catch(function (err) {
+                console.log('Unable to retrieve refreshed token ', err);
+                showToken('Unable to retrieve refreshed token ', err);
+            });
+        });
+        messaging.onMessage(function (payload) {
+            var label = null;
+            if (payload && payload.data) label = payload.data.label;
+            addJEvent('message_received_foreground', label, incCounter('message_received_foreground'));
+            console.log('Message received. ', payload);
+            appendMessage(payload);
+        });
+
+        const tokenDivId = 'token_div';
+        const permissionDivId = 'permission_div';
+
+        function resetUI() {
+            clearMessages();
+            var browserId = getBrowserId();
+            messaging.getToken().then(function (currentToken) {
+                if (currentToken) {
+                    $.ajax({
+                        url: 'https://ext.webteb.com/webteb/webpushunsubscribe',
+                        data: {
+                            registrationToken: currentToken,
+                            browserId: browserId
+                        },
+                        type: 'post',
+                        // async: false,
+                        success: function (res) {
+                            console.log('UnSubscribe to old notification success: ' + JSON.stringify(res));
+
+                        },
+                        error: function (err) {
+                            console.log('UnSubscribe FAILED: ' + JSON.stringify(err));
+                        }
+                    });
+                }
+            }).catch(function (err) {
+                console.log('An error occurred while retrieving token. ', err);
+            });
+        }
+
+        function sendTokenToServer(currentToken) {
+            if (!isTokenSentToServer()) {
+                var browserId = getBrowserId();
+
+                console.log('Sending token to server...');
+                var url = 'https://wxo8fnqt02.execute-api.eu-west-1.amazonaws.com/dev/push-notifications/tokens';
+                        if (!info) info = {};
+                info.counters = {};
+
+                info.counters.token_deleted = getCounter("token_deleted");
+                info.counters.permission_granted_app = getCounter("permission_granted_app");
+                info.counters.permission_blocked_app = getCounter("permission_blocked_app");
+                info.counters.permission_interval = getCounter("permission_interval");
+                info.counters.permission_requested_app = getCounter("permission_requested_app");
+                info.counters.permission_requested = getCounter("permission_requested");
+                info.counters.permission_granted = getCounter("permission_granted");
+                info.counters.permission_blocked = getCounter("permission_blocked");
+                info.counters.token_refreshed = getCounter("token_refreshed");
+                info.counters.message_received_foreground = getCounter("message_received_foreground");
+                info.counters.token_error = getCounter("token_error");
+                info.counters.token_sent_success = getCounter("token_sent_success");
+                info.counters.token_sent_fail = getCounter("token_sent_fail");
+
+                $.ajax({
+                    url: url,
+                    data: {
+                        token: currentToken,
+                        browserId: browserId,
+                        info: JSON.stringify(info)
+                    },
+                    type: 'post',
+                    // async: false,
+                    success: function (res) {
+                        console.log('sent token to server success: ' + JSON.stringify(res));
+                        addJEvent('token_sent_success', null, incCounter('token_sent_success'));
+                        setTokenSentToServer(true);
+                    },
+                    error: function (err) {
+                        console.log('sent token to server FAILED: ' + JSON.stringify(err));
+                        addJEvent('token_sent_fail', null, incCounter('token_sent_fail'));
+                    }
+                });
+            } else {
+                console.log('Token already sent to server so won\'t send it again ' +
+                    'unless it changes');
+            }
+        }
+
+        function isTokenSentToServer() {
+            return window.localStorage.getItem('push_sentToServer') === '1';
+        }
+
+        function setTokenSentToServer(sent) {
+            window.localStorage.setItem('push_sentToServer', sent ? '1' : '0');
+        }
+
+        function getLastNotificationRequestTime() {
+            var t = window.localStorage.getItem('push_lastNotificationRequestTime');
+            if (!t) t = "0";
+            return Number(t);
+        }
+
+        function setLastNotificationRequestTime() {
+            window.localStorage.setItem('push_lastNotificationRequestTime', (new Date()).getTime());
+        }
+
+        function getBrowserId() {
+            var browserId = window.localStorage.getItem('push_browserId');
+            if (!browserId) {
+                browserId = getGuid();
+                window.localStorage.setItem('push_browserId', browserId);
+            }
+
+            return browserId;
+        }
+
+        function getCounter(name) {
+            var key = "push_counter_" + name;
+            var counter = window.localStorage.getItem(key);
+            if (!counter || isNaN(counter)) {
+                counter = '0';
+                window.localStorage.setItem(key, counter);
+            }
+
+            return Number(counter);
+        }
+
+        function resetCounter(name) {
+            var key = "push_counter_" + name;
+            window.localStorage.setItem(key, "0");
+        }
+
+        function incCounter(name, inc) {
+            var key = "push_counter_" + name;
+            if (!inc) inc = 1;
+            counter = getCounter(name) + inc;
+            window.localStorage.setItem(key, String(counter));
+            return counter;
+        }
+
+        function s4() {
+            return Math.floor((1 + Math.random()) * 0x10000)
+                .toString(16).toLowerCase()
+                .substring(1);
+        };
+
+        function getGuid() {
+            return s4() + s4() + '-' + s4() + '-' + s4() + '-' +
+                s4() + '-' + s4() + s4() + s4();
+        }
+
+        function deleteToken() {
+            messaging.getToken().then(function (currentToken) {
+                messaging.deleteToken(currentToken).then(function (a) {
+                    addJEvent('token_deleted', null, incCounter('token_deleted'));
+                    console.log('Token deleted.');
+                    setTokenSentToServer(false);
+                    resetUI();
+                }).catch(function (err) {
+                    console.log('Unable to delete token. ', err);
+                });
+            }).catch(function (err) {
+                console.log('Error retrieving Instance ID token. ', err);
+                showToken('Error retrieving Instance ID token. ', err);
+            });
+        }
+
+        function showToken(currentToken) {
+            console.log("showToken:" + currentToken);
+            var tokenElement = document.querySelector('#token');
+            tokenElement.textContent = currentToken;
+        }
+
+        // Add a message to the messages element.
+        function appendMessage(payload) {
+            console.log('appendMessage:' + payload);
+            const messagesElement = document.querySelector('#messages');
+            const dataHeaderELement = document.createElement('h5');
+            const dataElement = document.createElement('pre');
+            dataElement.style = 'overflow-x:hidden;';
+            dataHeaderELement.textContent = 'Received message:';
+            dataElement.textContent = JSON.stringify(payload, null, 2);
+            messagesElement.appendChild(dataHeaderELement);
+            messagesElement.appendChild(dataElement);
+        }
+
+        // Clear the messages element of all children.
+        function clearMessages() {
+            console.log('clearMessages');
+            const messagesElement = document.querySelector('#messages');
+            while (messagesElement.hasChildNodes()) {
+                messagesElement.removeChild(messagesElement.lastChild);
+            }
+        }
+
+        function updateUIForPushEnabled(currentToken) {
+            console.log('updateUIForPushEnabled');
+            showHideDiv(tokenDivId, true);
+            showHideDiv(permissionDivId, false);
+            showToken(currentToken);
+        }
+
+        function updateUIForPushPermissionRequired() {
+            console.log('updateUIForPushPermissionRequired');
+            showHideDiv(tokenDivId, false);
+            showHideDiv(permissionDivId, true);
+            requestPermission();
+        }
+
+        function showHideDiv(divId, show) {
+            const div = document.querySelector('#' + divId);
+            if (show) {
+                div.style = 'display: visible';
+            } else {
+                div.style = 'display: none';
+            }
+        }
+    </script>
+
+</body></html>
